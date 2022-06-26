@@ -1,25 +1,19 @@
-import { ethers } from "ethers";
+import { Contract, ethers } from "ethers";
 import "dotenv/config";
 import * as ballotJson from "../../artifacts/contracts/Ballot.sol/Ballot.json";
+// eslint-disable-next-line node/no-missing-import
+import { Ballot } from "../../typechain";
 
 // This key is already public on Herong's Tutorial Examples - v1.03, by Dr. Herong Yang
 // Do never expose your keys like this
 const EXPOSED_KEY =
   "8da4ef21b864d2cc526dbdb2a120bd2874c36c9d0a1fb7f8c63d7f7a8b41de8f";
 
-function convertStringArrayToBytes32(array: string[]) {
-  const bytes32Array = [];
-  for (let index = 0; index < array.length; index++) {
-    bytes32Array.push(ethers.utils.formatBytes32String(array[index]));
-  }
-  return bytes32Array;
-}
-
 async function main() {
   const wallet =
     process.env.MNEMONIC && process.env.MNEMONIC.length > 0
       ? ethers.Wallet.fromMnemonic(process.env.MNEMONIC)
-      : new ethers.Wallet(process.env.PRIVATE_KEY ?? EXPOSED_KEY);
+      : new ethers.Wallet(process.env.PRIVATE_KEY1 ?? EXPOSED_KEY);
   console.log(`Using address ${wallet.address}`);
   const provider = ethers.providers.getDefaultProvider("ropsten");
   const signer = wallet.connect(provider);
@@ -29,26 +23,25 @@ async function main() {
   if (balance < 0.01) {
     throw new Error("Not enough ether");
   }
-  console.log("Deploying Ballot contract");
-  console.log("Proposals: ");
-  const proposals = process.argv.slice(2);
-  if (proposals.length < 2) throw new Error("Not enough proposals provided");
-  proposals.forEach((element, index) => {
-    console.log(`Proposal N. ${index + 1}: ${element}`);
-  });
-  const ballotFactory = new ethers.ContractFactory(
+  if (process.argv.length < 3) throw new Error("Ballot address missing");
+  const ballotAddress = process.argv[2];
+  if (process.argv.length < 4)
+    throw new Error("delegate wallet address is missing");
+  const delegateAaddress = process.argv[3];
+
+  const ballotContract: Ballot = new Contract(
+    ballotAddress,
     ballotJson.abi,
-    ballotJson.bytecode,
     signer
+  ) as Ballot;
+
+  console.log(
+    `  we are going to delegate voting from address ${wallet.address} -> to ${delegateAaddress}`
   );
-  const ballotContract = await ballotFactory.deploy(
-    convertStringArrayToBytes32(proposals)
-  );
-  console.log(convertStringArrayToBytes32(proposals));
+  const tx = await ballotContract.delegate(delegateAaddress);
   console.log("Awaiting confirmations");
-  await ballotContract.deployed();
-  console.log("Completed");
-  console.log(`Contract deployed at ${ballotContract.address}`);
+  await tx.wait();
+  console.log(`Transaction completed. Hash: ${tx.hash}`);
 }
 
 main().catch((error) => {
